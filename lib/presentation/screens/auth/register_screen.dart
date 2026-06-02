@@ -7,6 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/firebase_constants.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../core/utils/validators.dart';
+import '../../../routing/route_names.dart';
 import '../../providers/auth/auth_provider.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/common/custom_textfield.dart';
@@ -64,12 +65,17 @@ Future<void> _handleRegister() async {
     final authState = ref.watch(authProvider);
     final isTechnician = _selectedRole == FirebaseConstants.roleTechnician;
 
-    ref.listen(authProvider, (previous, next) {
-      if (next.error != null && previous?.error != next.error) {
-        context.showSnackBar(next.error ?? 'Error', isError: true);
-        ref.read(authProvider.notifier).clearError();
-      }
-    });
+ref.listen<AuthState>(authProvider, (previous, next) {
+       if (previous?.user == null && next.user != null) {
+         if (next.user?.role == FirebaseConstants.roleTechnician) {
+           context.go(RouteNames.profileSetup);
+         }
+       }
+       if (next.error != null && previous?.error != next.error) {
+         context.showSnackBar(next.error ?? 'Error', isError: true);
+         ref.read(authProvider.notifier).clearError();
+       }
+     });
 
     return Scaffold(
       appBar: AppBar(

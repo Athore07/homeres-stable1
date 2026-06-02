@@ -10,23 +10,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    print('✅ Firebase initialized');
-  } catch (e) {
-    print('❌ Firebase init error: $e');
-  }
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // Initialize dependencies
-  try {
-    await initializeDependencies();
-    print('✅ Dependencies initialized');
-  } catch (e) {
-    print('❌ Dependency init error: $e');
-  }
-
+  await initializeDependencies();
 
   runApp(const ProviderScope(child: HomeresApp()));
 }

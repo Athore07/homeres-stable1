@@ -20,13 +20,19 @@ class TechnicianGuard extends _$TechnicianGuard {
         return false;
       }
       final data = doc.data() as Map<String, dynamic>? ?? {};
-      final isComplete = data['verificationStatus'] == 'verified' || 
-                         data['verificationStatus'] == 'pending';
+      // Profile is complete if it has been created (has specialty or verification status)
+      final hasSpecialty = data['specialty'] != null && data['specialty'].toString().isNotEmpty;
+      final verificationStatus = data['verificationStatus'];
+      final isComplete = hasSpecialty || verificationStatus == 'verified' || verificationStatus == 'pending';
       state = AsyncValue.data(isComplete);
       return isComplete;
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
       return false;
     }
+  }
+
+  Future<void> refreshProfile(String technicianId) async {
+    await isProfileComplete(technicianId);
   }
 }

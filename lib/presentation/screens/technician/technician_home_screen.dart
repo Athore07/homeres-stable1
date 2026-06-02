@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../providers/auth/auth_provider.dart';
+import '../../providers/technician/profile_setup_provider.dart';
 import '../../providers/technician/job_requests_provider.dart';
 import '../../providers/technician/schedule_provider.dart';
 import '../../providers/technician/earnings_provider.dart';
@@ -20,23 +21,22 @@ class TechnicianHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _TechnicianHomeScreenState extends ConsumerState<TechnicianHomeScreen> {
-  bool _isAvailable = true;
-
   @override
   void initState() {
     super.initState();
-    _startListeners();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startListeners();
+    });
   }
 
   void _startListeners() {
     final user = ref.read(authProvider).user;
     if (user == null) return;
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(jobRequestsProvider.notifier).startListening(user.id);
-      ref.read(scheduleProvider.notifier).startListening(user.id);
-      ref.read(earningsProvider.notifier).startListening(user.id);
-    });
+    ref.read(jobRequestsProvider.notifier).startListening(user.id);
+    ref.read(scheduleProvider.notifier).startListening(user.id);
+    ref.read(earningsProvider.notifier).startListening(user.id);
+    ref.read(profileSetupProvider.notifier).loadProfile(user.id);
+    ref.read(profileSetupProvider.notifier).startListening(user.id);
   }
 
   @override
@@ -44,6 +44,7 @@ class _TechnicianHomeScreenState extends ConsumerState<TechnicianHomeScreen> {
     ref.read(jobRequestsProvider.notifier).stopListening();
     ref.read(scheduleProvider.notifier).stopListening();
     ref.read(earningsProvider.notifier).stopListening();
+    ref.read(profileSetupProvider.notifier).stopListening();
     super.dispose();
   }
 
@@ -54,11 +55,12 @@ class _TechnicianHomeScreenState extends ConsumerState<TechnicianHomeScreen> {
     final jobState = ref.watch(jobRequestsProvider);
     final earningsState = ref.watch(earningsProvider);
     final scheduleState = ref.watch(scheduleProvider);
+    final profileState = ref.watch(profileSetupProvider);
 
-    // Calculate stats
     final todayJobs = scheduleState.todayJobs.length;
     final totalEarnings = earningsState.filteredTotal;
-    final rating = 4.8; // This would come from technician profile
+    final rating = profileState.rating;
+    final isAvailable = profileState.isAvailable;
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -80,8 +82,11 @@ class _TechnicianHomeScreenState extends ConsumerState<TechnicianHomeScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               // Availability Toggle
               _AvailabilityToggle(
-                isAvailable: _isAvailable,
-                onChanged: (v) => setState(() => _isAvailable = v),
+                isAvailable: isAvailable,
+                onChanged: (v) {
+                  final notifier = ref.read(profileSetupProvider.notifier);
+                  notifier.setAvailability(v);
+                },
               ),
               const SizedBox(height: 24),
 

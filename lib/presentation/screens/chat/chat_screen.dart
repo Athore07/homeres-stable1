@@ -5,6 +5,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/firebase_service.dart';
+import '../../providers/chat/chat_provider.dart';
+import '../../providers/auth/auth_provider.dart';
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -16,34 +21,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
-  // Mock messages
-  final List<Map<String, dynamic>> _messages = [
-    {
-      'text': 'Hi! I have a problem with my electrical outlet.',
-      'sender': 'me',
-      'time': DateTime.now().subtract(const Duration(minutes: 30)),
-      'read': true,
-    },
-    {
-      'text': 'Hello! I can help with that. Can you describe the issue?',
-      'sender': 'other',
-      'time': DateTime.now().subtract(const Duration(minutes: 25)),
-      'read': true,
-    },
-    {
-      'text': 'The outlet in my kitchen is not working and there is a burning smell.',
-      'sender': 'me',
-      'time': DateTime.now().subtract(const Duration(minutes: 20)),
-      'read': true,
-    },
-    {
-      'text': 'That sounds urgent. I am on my way to your location.',
-      'sender': 'other',
-      'time': DateTime.now().subtract(const Duration(minutes: 5)),
-      'read': false,
-    },
-  ];
+  StreamSubscription? _messagesSubscription;
+  List<Map<String, dynamic>> _messages = [];
 
   @override
   void initState() {
@@ -57,6 +36,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _messagesSubscription?.cancel();
     super.dispose();
   }
 
@@ -73,8 +53,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final chatInfo = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    final chatId = chatInfo?['chatId'] as String?;
     final name = chatInfo?['name'] ?? 'Chat';
     final isOnline = chatInfo?['online'] ?? false;
+    final user = ref.watch(authProvider).user;
+
+    if (chatId != null && user != null && _messagesSubscription == null) {
+      // Listen to messages
+      _messagesSubscription = FirebaseService().chatsRef
+          .doc(chatId)
+          .collection('messages')
+          .orderBy('time', descending: true)
+          .snapshots()
+          .listen((snapshot) {
+        final messages = snapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            'text': data['text'] ?? '',
+            'sender': data['sender'],
+            'time': (data['time'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            'read': data['read'] ?? false,
+          };
+        }).toList();
+        setState(() {
+          _messages = messages;
+        });
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -138,85 +144,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           // Booking info banner
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primary.withOpacity(0.1)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Booking #${chatInfo?['bookingId'] ?? 'N/A'} - Technician is on the way',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w500,
+          if (chatInfo?['bookingId'] != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Booking #${chatInfo?['bookingId'] ?? 'N/A'} - Technician is on the way',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           // Messages list
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return _buildMessageBubble(
-                  context,
-                  _messages[index],
-                  index,
-                );
-              },
-            ),
-          ),
-          // Typing indicator
-          Container(
-            height: 24,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
+            child: _messages.isEmpty
+                ? const Center(child: Text('No messages yet'))
+                : ListView.builder(
+                    controller: _scrollController,
+                    reverse: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      return _buildMessageBubble(
+                        context,
+                        _messages[index],
+                        user?.id,
+                      );
+                    },
                   ),
-                ).animate(onPlay: (controller) => controller.repeat())
-                  .scale(duration: 600.ms, begin: const Offset(1, 1), end: const Offset(1.3, 1.3))
-                  .then(delay: 200.ms),
-                const SizedBox(width: 4),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.6),
-                    shape: BoxShape.circle,
-                  ),
-                ).animate(onPlay: (controller) => controller.repeat())
-                  .scale(duration: 600.ms, begin: const Offset(1, 1), end: const Offset(1.3, 1.3))
-                  .then(delay: 200.ms),
-                const SizedBox(width: 4),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.3),
-                    shape: BoxShape.circle,
-                  ),
-                ).animate(onPlay: (controller) => controller.repeat())
-                  .scale(duration: 600.ms, begin: const Offset(1, 1), end: const Offset(1.3, 1.3)),
-              ],
-            ),
           ),
           // Message input
           Container(
@@ -242,7 +211,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: TextField(
@@ -254,7 +223,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                       maxLines: null,
                       textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
+                      onSubmitted: (_) => _sendMessage(chatId, user?.id),
                     ),
                   ),
                 ),
@@ -266,7 +235,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _sendMessage,
+                    onPressed: () => _sendMessage(chatId, user?.id),
                   ),
                 ),
               ],
@@ -280,9 +249,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildMessageBubble(
     BuildContext context,
     Map<String, dynamic> message,
-    int index,
+    String? currentUserId,
   ) {
-    final isMe = message['sender'] == 'me';
+    final isMe = message['sender'] == currentUserId;
     
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -293,7 +262,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isMe ? AppColors.primary : Theme.of(context).colorScheme.surfaceVariant,
+          color: isMe ? AppColors.primary : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -316,7 +285,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  DateFormat('HH:mm').format(message['time']),
+                  DateFormat('HH:mm').format(message['time'] as DateTime? ?? DateTime.now()),
                   style: TextStyle(
                     color: isMe
                         ? Colors.white.withOpacity(0.7)
@@ -327,9 +296,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 if (isMe) ...[
                   const SizedBox(width: 4),
                   Icon(
-                    message['read'] ? Icons.done_all : Icons.done,
+                    (message['read'] as bool? ?? false) ? Icons.done_all : Icons.done,
                     size: 14,
-                    color: message['read']
+                    color: (message['read'] as bool? ?? false)
                         ? Colors.white.withOpacity(0.7)
                         : Colors.white.withOpacity(0.4),
                   ),
@@ -342,36 +311,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 10);
   }
 
-  void _sendMessage() {
+  void _sendMessage(String? chatId, String? userId) {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || chatId == null || userId == null) return;
     
-    setState(() {
-      _messages.insert(0, {
-        'text': text,
-        'sender': 'me',
-        'time': DateTime.now(),
-        'read': false,
-      });
-    });
-    
+    ref.read(chatProvider.notifier).sendMessage(chatId, text, userId);
     _messageController.clear();
     _scrollToBottom();
-    
-    // Simulate reply after 1 second
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        setState(() {
-          _messages.last['read'] = true;
-          _messages.insert(0, {
-            'text': 'Got it! I will be there shortly.',
-            'sender': 'other',
-            'time': DateTime.now(),
-            'read': true,
-          });
-        });
-        _scrollToBottom();
-      }
-    });
   }
 }

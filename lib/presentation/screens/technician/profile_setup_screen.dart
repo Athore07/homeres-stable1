@@ -61,26 +61,29 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 24),
-            Text('Profile Photo', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 24),
-            Row(children: [
-              Expanded(child: GestureDetector(onTap: () { Navigator.pop(context); _pickImage(notifier); }, child: Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.primary.withOpacity(0.2))), child: const Column(children: [Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 32), SizedBox(height: 8), Text('Camera', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600))])))),
-              const SizedBox(width: 16),
-              Expanded(child: GestureDetector(onTap: () { Navigator.pop(context); _pickImage(notifier); }, child: Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.08), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.accent.withOpacity(0.2))), child: const Column(children: [Icon(Icons.photo_library_rounded, color: AppColors.accent, size: 32), SizedBox(height: 8), Text('Gallery', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600))])))),
+      builder: (context) {
+        final state = ref.read(profileSetupProvider);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 24),
+              Text('Profile Photo', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              Row(children: [
+                Expanded(child: GestureDetector(onTap: () { Navigator.pop(context); _pickImage(notifier); }, child: Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.primary.withOpacity(0.2))), child: const Column(children: [Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 32), SizedBox(height: 8), Text('Camera', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600))])))),
+                const SizedBox(width: 16),
+                Expanded(child: GestureDetector(onTap: () { Navigator.pop(context); _pickImage(notifier); }, child: Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.08), borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.accent.withOpacity(0.2))), child: const Column(children: [Icon(Icons.photo_library_rounded, color: AppColors.accent, size: 32), SizedBox(height: 8), Text('Gallery', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600))])))),
+              ]),
+              if (state.imagePath != null || state.existingImageUrl != null) ...[
+                const SizedBox(height: 16),
+                TextButton.icon(onPressed: () { Navigator.pop(context); notifier.setImagePath(null); }, icon: const Icon(Icons.delete_outline, color: AppColors.error), label: const Text('Remove Photo', style: TextStyle(color: AppColors.error))),
+              ],
             ]),
-            if (notifier.state.imagePath != null || notifier.state.existingImageUrl != null) ...[
-              const SizedBox(height: 16),
-              TextButton.icon(onPressed: () { Navigator.pop(context); notifier.setImagePath(null); }, icon: const Icon(Icons.delete_outline, color: AppColors.error), label: const Text('Remove Photo', style: TextStyle(color: AppColors.error))),
-            ],
-          ]),
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -104,10 +107,24 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Use correct generated provider name
     final state = ref.watch(profileSetupProvider);
     final notifier = ref.read(profileSetupProvider.notifier);
-    final user = ref.watch(authProvider).user;
+
+    // Update text controllers when profile data loads
+    if (state.profileExists && state.specialty.isNotEmpty) {
+      if (_specialtyController.text != state.specialty) {
+        _specialtyController.text = state.specialty;
+      }
+      if (_experienceController.text != state.experience) {
+        _experienceController.text = state.experience;
+      }
+      if (_hourlyRateController.text != state.hourlyRate) {
+        _hourlyRateController.text = state.hourlyRate;
+      }
+      if (_aboutController.text != state.about) {
+        _aboutController.text = state.about;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -148,24 +165,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   ]),
                   const SizedBox(height: 24),
 
-                  // Skills
-                  SectionHeader(title: 'Skills & Expertise', accentColor: AppColors.success),
-                  const SizedBox(height: 12),
-                  Wrap(spacing: 12, runSpacing: 12, children: [
-                    'Wiring', 'Plumbing', 'HVAC', 'Carpentry', 'Appliance Repair', 'Painting', 'Landscaping', 'Cleaning'
-                  ].map((skill) => GestureDetector(
-                    onTap: () => notifier.toggleSkill(skill),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: state.skills.contains(skill) ? AppColors.success.withOpacity(0.15) : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: state.skills.contains(skill) ? AppColors.success : Colors.grey[300]!),
-                      ),
-                      child: Text(skill, style: TextStyle(color: state.skills.contains(skill) ? AppColors.success : Colors.grey[600], fontSize: 12)),
-                    ),
-                  )).toList()),
-                  const SizedBox(height: 24),
+// Skills
+                   SectionHeader(title: 'Skills & Expertise', accentColor: AppColors.success),
+                   const SizedBox(height: 12),
+                   Wrap(spacing: 12, runSpacing: 12, children: ProfileSetupState.availableSkills.map((skill) => GestureDetector(
+                     onTap: () => notifier.toggleSkill(skill),
+                     child: Container(
+                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                       decoration: BoxDecoration(
+                         color: state.skills.contains(skill) ? AppColors.success.withOpacity(0.15) : Colors.grey[200],
+                         borderRadius: BorderRadius.circular(20),
+                         border: Border.all(color: state.skills.contains(skill) ? AppColors.success : Colors.grey[300]!),
+                       ),
+                       child: Text(skill, style: TextStyle(color: state.skills.contains(skill) ? AppColors.success : Colors.grey[600], fontSize: 12)),
+                     ),
+                   )).toList()),
+                   const SizedBox(height: 24),
 
                   // Certifications
                   SectionHeader(title: 'Certifications & Documents', accentColor: AppColors.info),

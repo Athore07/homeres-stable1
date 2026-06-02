@@ -11,7 +11,6 @@ import '../../providers/homeowner/home_provider.dart';
 import '../../widgets/common/badge_icon.dart';
 import '../../widgets/common/section_header.dart';
 import '../../widgets/drawer/app_drawer.dart';
-import '../../widgets/technician/technician_card.dart';
 import '../../../routing/route_names.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -22,6 +21,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  MapController? _mapController;
+
   @override
   void initState() {
     super.initState();
@@ -30,12 +31,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void dispose() {
     ref.read(homeProvider.notifier).stopListening();
+    _mapController?.dispose();
     super.dispose();
   }
 
   String _greeting() {
     final h = DateTime.now().hour;
     return h < 6 ? 'Good Night' : h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening';
+  }
+
+  String _getFirstName(String fullName) {
+    return fullName.split(' ').first;
   }
 
   void _openSearch(BuildContext context) {
@@ -61,14 +67,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-        title: const Text('Homeres', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Home', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.search), onPressed: () => _openSearch(context)),
           const SizedBox(width: 12),
-          BadgeIcon(icon: Icons.chat, count: 3, iconColor: Colors.white, onTap: () => context.push(RouteNames.notifications)),
+          BadgeIcon(icon: Icons.chat, count: 3, iconColor: Colors.white, onTap: () => context.push(RouteNames.chatList)),
           const SizedBox(width: 15),
         ],
       ),
@@ -76,68 +82,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: state.isLoading
           ? const _Shimmer()
           : CustomScrollView(slivers: [
-              // === Header greeting ===
+              // === Header greeting with first name only ===
               _Header(
-                user: user?.name ?? 'User',
+                user: _getFirstName(user?.name ?? 'User'),
                 greeting: _greeting(),
                 message: 'What service you need assistance with?',
-                
               ),
 
-              // === Promo banner on top (right after header) ===
+              // === Promo banner ===
               const SliverToBoxAdapter(child: _PromoBanner()),
 
-              // === Location card ===
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _LocationCard(address: state.currentAddress),
-              )),
-
-              // === Mostly Searched services (2-column grid) ===
+              // === Mostly Searched services (2 items only) ===
               if (state.services.isNotEmpty)
                 _ServicesGridSection(
-                  services: state.services,
+                  services: state.services.take(2).toList(), // Only show 2 items
                   onSeeAll: () => context.push(RouteNames.serviceList),
                 ),
 
-              // === Nearby technicians ===
+              // === Nearby technicians section (horizontal scroll) ===
               if (state.nearbyTechnicians.isNotEmpty)
                 SliverToBoxAdapter(child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     SectionHeader(title: 'Nearby Technicians', actionLabel: 'See All', onActionTap: () => context.push(RouteNames.serviceList)),
                     const SizedBox(height: 8),
-                    SizedBox(height: 110, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: state.nearbyTechnicians.length, itemBuilder: (_, i) => _TechMiniCard(tech: state.nearbyTechnicians[i], onTap: () => context.push(RouteNames.booking, extra: state.nearbyTechnicians[i])))),
+                    SizedBox(height: 110, child: ListView.builder(
+                      scrollDirection: Axis.horizontal, 
+                      itemCount: state.nearbyTechnicians.length, 
+                      itemBuilder: (_, i) => _TechMiniCard(
+                        tech: state.nearbyTechnicians[i], 
+                        onTap: () => context.push(RouteNames.booking, extra: state.nearbyTechnicians[i])
+                      )
+                    )),
                   ]),
                 )),
 
-              // === Top rated technicians ===
-              if (state.topTechnicians.isNotEmpty)
-                SliverToBoxAdapter(child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    SectionHeader(title: 'Top Rated', actionLabel: 'View All', onActionTap: () => context.push(RouteNames.serviceList)),
-                    const SizedBox(height: 8),
-                    ...state.topTechnicians.take(3).map((t) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: TechnicianCard(
-                            name: t['name'] as String,
-                            specialty: t['specialty'] as String,
-                            rating: (t['rating'] as num).toDouble(),
-                            totalJobs: (t['totalJobs'] as num).toInt(),
-                            distance: LocationUtils.formatDistance((t['distance'] as num).toDouble()),
-                            isAvailable: t['isAvailable'] == true,
-                            onTap: () => context.push(RouteNames.booking, extra: t),
-                          ),
-                        )),
-                  ]),
-                )),
-
-              // === Partial map preview at the bottom ===
-              SliverToBoxAdapter(child: _PartialMapPreview(
-                latitude: state.latitude,
-                longitude: state.longitude,
-                nearbyTechs: state.nearbyTechnicians.take(6).toList(),
+              // === Map preview at the bottom showing user and nearby technicians ===
+              SliverToBoxAdapter(child: _MapPreview(
+                userLocation: GeoPoint(latitude: state.latitude, longitude: state.longitude),
+                nearbyTechnicians: state.nearbyTechnicians,
               )),
 
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -197,7 +180,7 @@ class _HomeSearchDelegate extends SearchDelegate<String> {
 }
 
 // ===================================================================
-// Header widget
+// Header widget with first name only
 // ===================================================================
 class _Header extends StatelessWidget {
   final String user, greeting, message;
@@ -215,12 +198,11 @@ class _Header extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.start, children: [
             Text('$greeting 👋', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text(user, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           ]),
           const SizedBox(height: 16),
-          // welcome message or question
-          Text(message, style: const TextStyle(fontSize: 16,)),
+          Text(message, style: const TextStyle(fontSize: 16)),
         ]),
       ),
     );
@@ -228,46 +210,7 @@ class _Header extends StatelessWidget {
 }
 
 // ===================================================================
-// Location card
-// ===================================================================
-class _LocationCard extends StatelessWidget {
-  final String address;
-  const _LocationCard({required this.address});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.withOpacity(0.1)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
-        ),
-        child: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Your Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 2),
-            Text(address, style: TextStyle(color: Colors.grey[500], fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-          ])),
-          const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-        ]),
-      ),
-    );
-  }
-}
-
-// ===================================================================
-// Services grid section — Mostly Searched
+// Services grid section - Only 2 items
 // ===================================================================
 class _ServicesGridSection extends StatelessWidget {
   final List<Map<String, dynamic>> services;
@@ -283,18 +226,16 @@ class _ServicesGridSection extends StatelessWidget {
           SectionHeader(title: 'Mostly Searched', actionLabel: 'See All', onActionTap: onSeeAll),
           const SizedBox(height: 12),
           GridView.builder(
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true, 
+            physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
               childAspectRatio: 1.05,
             ),
-            itemCount: services.length,
-            itemBuilder: (_, i) => _ServiceCard(
-              service: services[i],
-              onSeeAll: onSeeAll,
-            ),
+            itemCount: services.length, // Only 2 items
+            itemBuilder: (_, i) => _ServiceCard(service: services[i]),
           ),
         ]),
       ),
@@ -304,17 +245,20 @@ class _ServicesGridSection extends StatelessWidget {
 
 class _ServiceCard extends StatelessWidget {
   final Map<String, dynamic> service;
-  final VoidCallback onSeeAll;
-  const _ServiceCard({required this.service, required this.onSeeAll});
+  const _ServiceCard({required this.service});
 
   @override
   Widget build(BuildContext context) {
-    final color = service['color'] as Color;
+    final color = service['color'] as Color? ?? AppColors.primary;
     return GestureDetector(
-      onTap: () => context.push(RouteNames.booking),
+      onTap: () => context.push(RouteNames.booking, extra: service),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface, 
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
             padding: const EdgeInsets.all(10),
@@ -323,6 +267,9 @@ class _ServiceCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(service['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text('\$${(service['basePrice'] as num).toStringAsFixed(0)}/hr', 
+            style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w500)),
         ]),
       ),
     );
@@ -330,84 +277,171 @@ class _ServiceCard extends StatelessWidget {
 }
 
 // ===================================================================
-// Partial map preview at bottom
+// Map preview showing user (blue dot) and nearby technicians (red markers)
 // ===================================================================
-class _PartialMapPreview extends StatelessWidget {
-  final double latitude, longitude;
-  final List<Map<String, dynamic>> nearbyTechs;
-  const _PartialMapPreview({required this.latitude, required this.longitude, required this.nearbyTechs});
+class _MapPreview extends StatefulWidget {
+  final GeoPoint userLocation;
+  final List<Map<String, dynamic>> nearbyTechnicians;
 
-  Future<void> _onTapMap(BuildContext context) async {
-    // Navigate to the tracking route with the current user's location; the
-    // tracking screen will use `loadTracking` to show the full OSM map.
-    // A bookingId of '' (empty string) results in the default location being
-    // used inside the provider while the map is fully initialised.
-    if (context.mounted) {
-      context.push(RouteNames.tracking);
+  const _MapPreview({
+    required this.userLocation,
+    required this.nearbyTechnicians,
+  });
+
+  @override
+  State<_MapPreview> createState() => _MapPreviewState();
+}
+
+class _MapPreviewState extends State<_MapPreview> {
+  MapController? _mapController;
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addUserMarker() async {
+    await _mapController!.addMarker(
+      widget.userLocation,
+      markerIcon: const MarkerIcon(
+        icon: Icon(
+          Icons.person_pin_circle,
+          color: Colors.blue,
+          size: 40,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addTechnicianMarkers() async {
+    for (final tech in widget.nearbyTechnicians) {
+      final techLat = tech['latitude'] as double?;
+      final techLon = tech['longitude'] as double?;
+      if (techLat == null || techLon == null) continue;
+      await _mapController!.addMarker(
+        GeoPoint(latitude: techLat, longitude: techLon),
+        markerIcon: const MarkerIcon(
+          icon: Icon(
+            Icons.location_on,
+            color: Colors.red,
+            size: 35,
+          ),
+        ),
+      );
     }
+  }
+
+  Future<void> _addAllMarkers() async {
+    await _addUserMarker();
+    await _addTechnicianMarkers();
+
+    if (widget.nearbyTechnicians.isEmpty) return;
+    final validTechs = widget.nearbyTechnicians
+        .where((t) => t['latitude'] != null && t['longitude'] != null)
+        .toList();
+    if (validTechs.isEmpty) return;
+
+    final points = [
+      widget.userLocation,
+      ...validTechs.map((t) => GeoPoint(
+            latitude: t['latitude'] as double,
+            longitude: t['longitude'] as double,
+          )),
+    ];
+    await _mapController!.zoomToBoundingBox(
+      BoundingBox.fromGeoPoints(points),
+      paddinInPixel: 50,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => _onTapMap(context),
+      onTap: () {
+        if (context.mounted) {
+          context.push(RouteNames.tracking);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        height: 200,
+        height: 220,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         clipBehavior: Clip.antiAlias,
-        child: Stack(fit: StackFit.expand, children: [
-          OSMFlutter(
-            controller: MapController.withPosition(
-              initPosition: GeoPoint(latitude: latitude, longitude: longitude),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            OSMFlutter(
+              controller: MapController.withPosition(
+                initPosition: GeoPoint(
+                  latitude: widget.userLocation.latitude,
+                  longitude: widget.userLocation.longitude,
+                ),
+              ),
+              osmOption: const OSMOption(
+                zoomOption: ZoomOption(
+                  initZoom: 14,
+                  minZoomLevel: 10,
+                  maxZoomLevel: 18,
+                ),
+                showZoomController: false,
+              ),
+              onMapIsReady: (bool isReady) {
+                if (isReady && _mapController != null) {
+                  _addAllMarkers();
+                }
+              },
             ),
-            osmOption: OSMOption(
-              zoomOption: const ZoomOption(initZoom: 13, minZoomLevel: 8, maxZoomLevel: 15),
-              userTrackingOption: const UserTrackingOption(enableTracking: false),
-              roadConfiguration: const RoadOption(roadColor: AppColors.primary, roadWidth: 3, zoomInto: false),
-              showZoomController: false,
-            ),
-          ),
-          // Gradient overlay
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Colors.black26],
-                stops: [0.6, 1.0],
+            // Gradient overlay for better text visibility
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.3)],
+                      stops: const [0.7, 1.0],
+                    ),
+                  ),
+                ),
               ),
             ),
-            child: SizedBox.expand(),
-          ),
-          // "Nearby Map" tap label
-          Positioned(
-            bottom: 10,
-            left: 0,
-            right: 0,
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white.withAlpha(220), borderRadius: BorderRadius.circular(20)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                  Icon(Icons.map_outlined, size: 14, color: AppColors.primary),
-                  SizedBox(width: 6),
-                  Text('Tap to view Live Map', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                ]),
+            // Tap to expand label
+            Positioned(
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(220),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.map_outlined, size: 14, color: AppColors.primary),
+                      SizedBox(width: 6),
+                      Text('Tap to view Live Map', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               ),
-            ]),
-          ),
-        ]),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ===================================================================
-// Tech mini card
+// Tech mini card for horizontal scroll
 // ===================================================================
 class _TechMiniCard extends StatelessWidget {
   final Map<String, dynamic> tech;
@@ -419,18 +453,40 @@ class _TechMiniCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 160, margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.withOpacity(0.1))),
+        width: 160, 
+        margin: const EdgeInsets.only(right: 8), 
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface, 
+          borderRadius: BorderRadius.circular(14), 
+          border: Border.all(color: Colors.grey.withOpacity(0.1))
+        ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            CircleAvatar(radius: 16, backgroundColor: AppColors.primary.withOpacity(0.1), child: Text((tech['name'] as String)[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12))),
+            CircleAvatar(
+              radius: 16, 
+              backgroundColor: AppColors.primary.withOpacity(0.1), 
+              child: Text(
+                (tech['name'] as String)[0], 
+                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)
+              )
+            ),
             const SizedBox(width: 6),
-            Expanded(child: Text(tech['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), overflow: TextOverflow.ellipsis)),
+            Expanded(
+              child: Text(
+                tech['name'] as String, 
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11), 
+                overflow: TextOverflow.ellipsis
+              )
+            ),
           ]),
           const Spacer(),
           Text(tech['specialty'] as String, style: TextStyle(color: Colors.grey[500], fontSize: 10)),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [const Icon(Icons.star, color: Colors.amber, size: 11), Text('${(tech['rating'] as num).toStringAsFixed(1)}', style: const TextStyle(fontSize: 10))]),
+            Row(children: [
+              const Icon(Icons.star, color: Colors.amber, size: 11), 
+              Text((tech['rating'] as num).toStringAsFixed(1), style: const TextStyle(fontSize: 10))
+            ]),
             Text(LocationUtils.formatDistance((tech['distance'] as num).toDouble()), style: const TextStyle(fontSize: 9, color: Colors.grey)),
           ]),
         ]),
@@ -440,7 +496,7 @@ class _TechMiniCard extends StatelessWidget {
 }
 
 // ===================================================================
-// Promo banner — now placed right after the header on the home screen
+// Promo banner
 // ===================================================================
 class _PromoBanner extends StatelessWidget {
   const _PromoBanner();
@@ -451,22 +507,37 @@ class _PromoBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
         height: 100,
-        decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF8C5A)]), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF6B35), Color(0xFFFF8C5A)]
+          ), 
+          borderRadius: BorderRadius.circular(20)
+        ),
         child: Stack(children: [
-          Positioned(right: -10, top: -10, child: Container(width: 80, height: 80, decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle))),
-          Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text('SPECIAL OFFER', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              SizedBox(height: 4),
-              Text('Get 20% off', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('on first booking!', style: TextStyle(color: Colors.white70, fontSize: 11)),
-            ])),
-            ElevatedButton(
-              onPressed: () => context.push(RouteNames.serviceList),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFFFF6B35), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-              child: const Text('Book Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            ),
-          ])),
+          Positioned(right: -10, top: -10, child: Container(
+            width: 80, height: 80, 
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle)
+          )),
+          Padding(
+            padding: const EdgeInsets.all(16), 
+            child: Row(children: [
+              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text('SPECIAL OFFER', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                SizedBox(height: 4),
+                Text('Get 20% off', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('on first booking!', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              ])),
+              ElevatedButton(
+                onPressed: () => context.push(RouteNames.serviceList),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white, 
+                  foregroundColor: const Color(0xFFFF6B35), 
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                ),
+                child: const Text('Book Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+          ),
         ]),
       ),
     );

@@ -30,11 +30,11 @@ class AppDrawer extends ConsumerWidget {
               _MenuItem(icon: Icons.settings_outlined, title: 'Settings', onTap: () { Navigator.pop(context); context.push('/settings'); }),
               _MenuItem(icon: Icons.help_outline, title: 'Help & Support', onTap: () { Navigator.pop(context); context.push('/settings/help'); }),
               _MenuItem(icon: Icons.info_outline, title: 'About', onTap: () { Navigator.pop(context); context.push('/settings/about'); }),
+              _LogoutTile(ref: ref),
+              _VersionInfo(),
+              const SizedBox(height: 12),
             ]),
           ),
-          _LogoutTile(ref: ref),
-          _VersionInfo(),
-          const SizedBox(height: 12),
         ]),
       ),
     );
@@ -44,14 +44,14 @@ class AppDrawer extends ConsumerWidget {
     final items = switch (role) {
       FirebaseConstants.roleTechnician => [
         _MenuItem(icon: Icons.dashboard_rounded, title: 'Dashboard', onTap: () { Navigator.pop(context); context.go(RouteNames.technicianHome); }),
-        _MenuItem(icon: Icons.person_rounded, title: 'My Profile', onTap: () { Navigator.pop(context); context.push('/technician/profile'); }),
+        _MenuItem(icon: Icons.person_rounded, title: 'My Profile', onTap: () { Navigator.pop(context); context.push('/settings/technician-profile'); }),
         _MenuItem(icon: Icons.work_rounded, title: 'Job Requests', onTap: () { Navigator.pop(context); context.push(RouteNames.jobRequests); }),
         _MenuItem(icon: Icons.calendar_month_rounded, title: 'Schedule', onTap: () { Navigator.pop(context); context.push(RouteNames.schedule); }),
         _MenuItem(icon: Icons.account_balance_wallet_rounded, title: 'Earnings', onTap: () { Navigator.pop(context); context.push(RouteNames.earnings); }),
       ],
       FirebaseConstants.roleAdmin => [
         _MenuItem(icon: Icons.dashboard_rounded, title: 'Dashboard', onTap: () { Navigator.pop(context); context.go(RouteNames.adminDashboard); }, trailing: _StatusDot(AppColors.success)),
-        _MenuItem(icon: Icons.person_rounded, title: 'Admin Profile', onTap: () { Navigator.pop(context); context.push('/admin/profile'); }),
+        _MenuItem(icon: Icons.person_rounded, title: 'Admin Profile', onTap: () { Navigator.pop(context); context.push('/settings/admin-profile'); }),
         _MenuItem(icon: Icons.people_rounded, title: 'Manage Users', onTap: () { Navigator.pop(context); context.push(RouteNames.manageUsers); }),
         _MenuItem(icon: Icons.engineering_rounded, title: 'Technicians', onTap: () { Navigator.pop(context); context.push(RouteNames.manageTechnicians); }),
         _MenuItem(icon: Icons.miscellaneous_services_rounded, title: 'Services', onTap: () { Navigator.pop(context); context.push(RouteNames.manageServices); }),
@@ -59,7 +59,7 @@ class AppDrawer extends ConsumerWidget {
       ],
       _ => [
         _MenuItem(icon: Icons.home_rounded, title: 'Home', onTap: () { Navigator.pop(context); context.go(RouteNames.home); }),
-        _MenuItem(icon: Icons.person_rounded, title: 'My Profile', onTap: () { Navigator.pop(context); context.push('/homeowner/profile'); }),
+        _MenuItem(icon: Icons.person_rounded, title: 'My Profile', onTap: () { Navigator.pop(context); context.push('/settings/homeowner-profile'); }),
         _MenuItem(icon: Icons.build_rounded, title: 'Services', onTap: () { Navigator.pop(context); context.push(RouteNames.serviceList); }),
         _MenuItem(icon: Icons.history_rounded, title: 'Booking History', onTap: () { Navigator.pop(context); context.push(RouteNames.bookingHistory); }),
         _MenuItem(icon: Icons.favorite_rounded, title: 'Favorites', onTap: () { Navigator.pop(context); context.push(RouteNames.favorites); }),
@@ -81,39 +81,39 @@ class _DrawerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 36, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [AppColors.primary, AppColors.primaryDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
-            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.4), width: 3)),
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withOpacity(0.4), width: 2)),
             child: CircleAvatar(
-              radius: 36,
+              radius: 28,
               backgroundColor: Colors.white.withOpacity(0.15),
               backgroundImage: user?.profileImage != null ? NetworkImage(user!.profileImage!) : null,
               child: user?.profileImage == null ? Text(
                 user?.name.isNotEmpty == true ? user!.name[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
               ) : null,
             ),
           ),
           const Spacer(),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 6, height: 6, decoration: BoxDecoration(color: _roleColor(role), shape: BoxShape.circle)),
-              const SizedBox(width: 6),
-              Text(role.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1)),
+              Container(width: 5, height: 5, decoration: BoxDecoration(color: _roleColor(role), shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+              Text(role.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
             ]),
           ),
         ]),
-        const SizedBox(height: 16),
-        Text(user?.name ?? 'Welcome', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(user?.email ?? '', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+        const SizedBox(height: 12),
+        Text(user?.name ?? 'Welcome', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 1),
+        Text(user?.email ?? '', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11)),
       ]),
     );
   }

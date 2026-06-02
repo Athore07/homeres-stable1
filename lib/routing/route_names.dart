@@ -56,7 +56,7 @@ class RouteNames {
   // Features
   static const String search = '/search';
   static const String filter = '/filter';
-  static const String chat = '/chat';
+  static const String chatList = '/chat/list';
   static const String chatDetail = '/chat/detail';
   static const String payment = '/payment';
   static const String paymentMethods = '/payment/methods';

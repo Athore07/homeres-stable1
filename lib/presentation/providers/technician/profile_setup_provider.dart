@@ -1,6 +1,7 @@
 // lib/presentation/providers/technician/profile_setup_provider.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../presentation/providers/auth/auth_provider.dart';
 import 'dart:io';
 import 'dart:async';
 import '../../../core/services/firebase_service.dart';
@@ -20,6 +21,8 @@ class ProfileSetupState {
   final bool profileExists;
   final String verificationStatus;
   final String? error;
+  final double rating;
+  final bool isAvailable;
 
   const ProfileSetupState({
     this.specialty = '',
@@ -34,6 +37,8 @@ class ProfileSetupState {
     this.profileExists = false,
     this.verificationStatus = 'pending',
     this.error,
+    this.rating = 0.0,
+    this.isAvailable = false,
   });
 
   static const availableSkills = [
@@ -51,6 +56,7 @@ class ProfileSetupState {
     List<String>? skills, String? imagePath, String? existingImageUrl,
     bool? isSubmitting, bool? isSuccess, bool? profileExists,
     String? verificationStatus, String? error,
+    double? rating, bool? isAvailable,
   }) {
     return ProfileSetupState(
       specialty: specialty ?? this.specialty, experience: experience ?? this.experience,
@@ -60,6 +66,8 @@ class ProfileSetupState {
       isSubmitting: isSubmitting ?? this.isSubmitting, isSuccess: isSuccess ?? this.isSuccess,
       profileExists: profileExists ?? this.profileExists,
       verificationStatus: verificationStatus ?? this.verificationStatus, error: error,
+      rating: rating ?? this.rating,
+      isAvailable: isAvailable ?? this.isAvailable,
     );
   }
 }
@@ -92,6 +100,8 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
                 skills: data['skills'] != null ? List<String>.from(data['skills']) : state.skills,
                 existingImageUrl: data['profileImage'] as String?,
                 verificationStatus: data['verificationStatus'] as String? ?? 'pending',
+                rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+                isAvailable: data['isAvailable'] as bool? ?? false,
               );
             }
           },
@@ -120,6 +130,8 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
           skills: data['skills'] != null ? List<String>.from(data['skills']) : [],
           existingImageUrl: data['profileImage'] as String?,
           verificationStatus: data['verificationStatus'] as String? ?? 'pending',
+          rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+          isAvailable: data['isAvailable'] as bool? ?? false,
         );
       }
     } catch (e) {
@@ -139,6 +151,22 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
     state = state.copyWith(skills: list);
   }
 
+  void setAvailability(bool value) {
+    state = state.copyWith(isAvailable: value);
+    _updateAvailabilityInFirebase(value);
+  }
+
+  Future<void> _updateAvailabilityInFirebase(bool value) async {
+    try {
+      final user = ref.read(authProvider).user;
+      if (user != null) {
+        await _firebaseService.techniciansRef.doc(user.id).update({'isAvailable': value});
+      }
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
   Future<bool> submitProfile(String userId, String userName, String email, String phone) async {
     state = state.copyWith(isSubmitting: true, error: null);
 
@@ -152,7 +180,7 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
         imageUrl = await ref.getDownloadURL();
       }
 
-      await _firebaseService.techniciansRef.doc(userId).set({
+await _firebaseService.techniciansRef.doc(userId).set({
         'userId': userId,
         'name': userName,
         'email': email,
@@ -164,11 +192,11 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
         'skills': state.skills,
         'profileImage': imageUrl,
         'verificationStatus': 'pending',
-        'isAvailable': false,
-        'rating': 0.0,
+        'isAvailable': state.isAvailable,
+        'rating': state.rating,
         'totalJobs': 0,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)); // Use merge to preserve existing fields
+      }, SetOptions(merge: true));
 
       state = state.copyWith(isSubmitting: false, isSuccess: true);
       return true;
@@ -178,7 +206,6 @@ class ProfileSetupNotifier extends _$ProfileSetupNotifier {
     }
   }
 
-  @override
   void dispose() {
     _subscription?.cancel();
   }

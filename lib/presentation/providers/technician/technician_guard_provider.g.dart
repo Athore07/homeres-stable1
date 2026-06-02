@@ -33,7 +33,7 @@ final class TechnicianGuardProvider
   TechnicianGuard create() => TechnicianGuard();
 }
 
-String _$technicianGuardHash() => r'afa35602a5e00757c07d68ee8b4e540c5d35a4ee';
+String _$technicianGuardHash() => r'a5e09690c0cf05395b5b157c3b0e6e744adc5a4e';
 
 abstract class _$TechnicianGuard extends $AsyncNotifier<bool> {
   FutureOr<bool> build();

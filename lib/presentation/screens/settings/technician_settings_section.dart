@@ -1,6 +1,7 @@
 // lib/presentation/screens/settings/technician_settings_section.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../widgets/common/section_header.dart';
 
@@ -11,6 +12,7 @@ class TechnicianSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SectionHeader(title: 'Technician Settings', accentColor: AppColors.info).animate().fadeIn(duration: 400.ms),
+      _Tile(icon: Icons.engineering, title: 'Technician Profile', subtitle: 'Manage your professional info', onTap: () => context.push('/settings/technician-profile')),
       _Tile(icon: Icons.build, title: 'Service Areas', subtitle: 'Manage your service locations'),
       _Tile(icon: Icons.work, title: 'Working Hours', subtitle: 'Set your availability'),
       _Tile(icon: Icons.attach_money, title: 'Rate Settings', subtitle: 'Update your hourly rate'),

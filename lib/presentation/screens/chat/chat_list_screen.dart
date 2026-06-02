@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../widgets/common/empty_state_widget.dart';
 import '../../../routing/route_names.dart';
+import '../../providers/chat/chat_provider.dart';
+import '../../providers/auth/auth_provider.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -16,50 +18,47 @@ class ChatListScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatListScreenState extends ConsumerState<ChatListScreen> {
-  // Mock chat data
-  final List<Map<String, dynamic>> _chats = [
-    {
-      'name': 'John Doe',
-      'lastMessage': 'I am on my way to your location',
-      'time': DateTime.now().subtract(const Duration(minutes: 5)),
-      'unread': 2,
-      'avatar': null,
-      'online': true,
-      'bookingId': 'BK123',
-    },
-    {
-      'name': 'Jane Smith',
-      'lastMessage': 'Thank you for the great service!',
-      'time': DateTime.now().subtract(const Duration(hours: 2)),
-      'unread': 0,
-      'avatar': null,
-      'online': false,
-      'bookingId': 'BK124',
-    },
-    {
-      'name': 'Mike Johnson',
-      'lastMessage': 'Can you confirm the booking for tomorrow?',
-      'time': DateTime.now().subtract(const Duration(days: 1)),
-      'unread': 1,
-      'avatar': null,
-      'online': true,
-      'bookingId': 'BK125',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(authProvider).user;
+      if (user != null) {
+        ref.read(chatProvider.notifier).startListening(user.id);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(chatProvider.notifier).stopListening();
+    super.dispose();
+  }
+
+  String _formatChatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) return 'Now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+    if (difference.inHours < 24) return DateFormat('HH:mm').format(dateTime);
+    if (difference.inDays < 7) return DateFormat('EEE').format(dateTime);
+    return DateFormat('MMM d').format(dateTime);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final chatState = ref.watch(chatProvider);
+    final chats = chatState.chats;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messages', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
         ],
       ),
-      body: _chats.isEmpty
+      body: chats.isEmpty
           ? const EmptyStateWidget(
               icon: Icons.chat_bubble_outline,
               title: 'No Messages',
@@ -67,9 +66,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _chats.length,
+              itemCount: chats.length,
               itemBuilder: (context, index) {
-                return _buildChatItem(context, _chats[index], index)
+                return _buildChatItem(context, chats[index], index)
                     .animate()
                     .fadeIn(
                       duration: 400.ms,
@@ -82,15 +81,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   }
 
   Widget _buildChatItem(BuildContext context, Map<String, dynamic> chat, int index) {
-    final hasUnread = chat['unread'] > 0;
+    final hasUnread = (chat['unread'] as int) > 0;
     
     return GestureDetector(
       onTap: () => context.push(
         RouteNames.chatDetail,
         extra: {
+          'chatId': chat['id'],
           'name': chat['name'],
           'bookingId': chat['bookingId'],
-          'online': chat['online'],
+          'online': chat['online'] ?? false,
         },
       ),
       child: Container(
@@ -110,16 +110,17 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: AppColors.primary.withOpacity(0.1),
-                  child: Text(
-                    chat['name'][0],
+                  backgroundImage: chat['avatar'] != null ? NetworkImage(chat['avatar']) : null,
+                  child: chat['avatar'] == null ? Text(
+                    (chat['name'] as String? ?? '?')[0].toUpperCase(),
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
                     ),
-                  ),
+                  ) : null,
                 ),
-                if (chat['online'])
+                if (chat['online'] == true)
                   Positioned(
                     right: 0,
                     bottom: 0,
@@ -144,14 +145,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          chat['name'],
+                          chat['name'] ?? 'Chat',
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                       ),
                       Text(
-                        _formatChatTime(chat['time']),
+                        _formatChatTime(chat['time'] as DateTime? ?? DateTime.now()),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: hasUnread
                               ? AppColors.primary
@@ -166,7 +167,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          chat['lastMessage'],
+                          chat['lastMessage'] ?? '',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: hasUnread
                                 ? Theme.of(context).colorScheme.onSurface
@@ -201,16 +202,5 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         ),
       ),
     );
-  }
-
-  String _formatChatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) return 'Now';
-    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
-    if (difference.inHours < 24) return DateFormat('HH:mm').format(dateTime);
-    if (difference.inDays < 7) return DateFormat('EEE').format(dateTime);
-    return DateFormat('MMM d').format(dateTime);
   }
 }

@@ -32,9 +32,13 @@ class SettingsScreen extends ConsumerWidget {
     final role = user?.role ?? 'homeowner';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+  appBar: AppBar(
+    title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+    leading: IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () => Navigator.pop(context),
+    ),
+  ),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const SizedBox(height: 16),
